@@ -1,5 +1,6 @@
 const express = require("express")
 const db = require("../db")
+const ExpressError = require("../expressError")
 const router = new express.Router()
 
 router.get('/', async (req, res, next) => {
@@ -48,11 +49,46 @@ router.post('/', async (req, res, next) =>  {
 
 router.put('/:id', async (req, res, next) =>{
     try{
+
+        let {amt, paid} = req.body;
+        let id = req.params.id
+        let paidDate = null;
+
+        let currResults = await db.query(
+            `SELECT paid
+            FROM invoices
+            WHERE id = $1`, [id]
+        )
+
+        let currPaidDate = currResults.rows[0].paid_date;
+
+        if (!currPaidDate && paid){
+            paidDate = new Date();
+        } else if (!paid){
+            paidDate = null
+        } else {
+            paidDate = currPaidDate
+        }
+
+        if (currResults.rows.length === 0){
+            throw new ExpressError(`No invoice id of ${id}`, 404);
+        }
+
+
+        
         let results = await db.query(`
-        UPDATE invoices 
-        WHERE id = $1`,[req.params.id])
+        UPDATE invoices
+        SET amt = $1 , paid = $2 , paid_date $3
+        WHERE id = $4
+        RETURNING id, comp_code, amt, paid, add_date, paid_date`,
+        [amt, paid, paidDate, id])
+        
+        if (results.rows.length === 0 ){
+            throw ExpressError(`Cannot find invoice ${id}`, 404)
+        }
 
         return res.json({"invoice": results.rows[0]})
+
     }
     catch(err){
         next(err)
